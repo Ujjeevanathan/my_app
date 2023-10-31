@@ -3,6 +3,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:my_app/PolygonPainter.dart';
 
 /// [RunModelByCameraDemo] stacks [CameraView] and [BoxWidget]s with bottom sheet for stats
 class RunModelByCameraDemo extends StatefulWidget {
@@ -90,7 +91,8 @@ class _RunModelByCameraDemoState extends State<RunModelByCameraDemo> {
               controller,
             ),
           ),
-          ...displayBoxesAroundRecognizedObjects(size),
+          //...displayBoxesAroundRecognizedObjects(size),
+          ...displaySegmentaionBoxesAroundRecognizedObjects(size),
           Positioned(
             bottom: 75,
             width: MediaQuery.of(context).size.width,
@@ -132,9 +134,12 @@ class _RunModelByCameraDemoState extends State<RunModelByCameraDemo> {
 
   Future<void> loadYoloModel() async {
     await vision.loadYoloModel(
-        labels: 'assets/best-v8.txt',
-        modelPath: 'assets/best_float32.tflite',
-        modelVersion: "yolov8",
+        //labels: 'assets/best-v8.txt',
+        //modelPath: 'assets/best_float32.tflite', //---------> this is for object detection
+        labels: 'assets/best_segmentation.txt',
+        modelPath: 'assets/best_segmentation_float32.tflite',
+        //modelVersion: "yolov8", //---------> this is for object detection
+        modelVersion: "yolov8seg",
         numThreads: 8,
         useGpu: true);
     setState(() {
@@ -178,6 +183,59 @@ void yoloOnFrame(CameraImage cameraImage) async{
       yoloResults.clear();
     });
   }
+
+//Use this for segmentation analysis.
+List<Widget> displaySegmentaionBoxesAroundRecognizedObjects(Size screen) {
+    if (yoloResults.isEmpty) return [];
+
+    double factorX = screen.width / (cameraImage?.height ?? 1);
+    double factorY = screen.height / (cameraImage?.width ?? 1);
+
+    Color colorPick = const Color.fromARGB(255, 50, 233, 30);
+
+      return yoloResults.map((result) {
+
+      speak("${result['tag']}");
+
+      return Stack(children: [
+        Positioned(
+          left: result["box"][0] * factorX,
+          top: result["box"][1] * factorY,
+          width: (result["box"][2] - result["box"][0]) * factorX,
+          height: (result["box"][3] - result["box"][1]) * factorY,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+              border: Border.all(color: Colors.pink, width: 2.0),
+            ),
+            child: Text(
+              "${result['tag']} ${(result['box'][4] * 100).toStringAsFixed(0)}%",
+              style: TextStyle(
+                background: Paint()..color = colorPick,
+                color: Colors.white,
+                fontSize: 18.0,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+            left: result["box"][0] * factorX,
+            top: result["box"][1] * factorY,
+            width: (result["box"][2] - result["box"][0]) * factorX,
+            height: (result["box"][3] - result["box"][1]) * factorY,
+            child: CustomPaint(
+              painter: PolygonPainter(
+                  points: (result["polygons"] as List<dynamic>).map((e) {
+                Map<String, double> xy = Map<String, double>.from(e);
+                xy['x'] = (xy['x'] as double) * factorX;
+                xy['y'] = (xy['y'] as double) * factorY;
+                return xy;
+              }).toList()),
+            )),
+      ]);
+    }).toList();
+  }
+
 
   List<Widget> displayBoxesAroundRecognizedObjects(Size screen) {
     if (yoloResults.isEmpty) return [];
